@@ -1,0 +1,8 @@
+192.168.33.199  chef-automate.test
+192.168.33.200  chef-server.test
+192.168.33.201  chef-supermarket.test
+192.168.33.202  client1.test
+192.168.33.203  client2.test
+192.168.33.204  client3.test
+192.168.33.205  client4.test
+192.168.33.206  client5.test

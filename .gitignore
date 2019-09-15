@@ -15,6 +15,9 @@ bin/*
 # test kitchen
 .kitchen/
 .kitchen.local.yml
+certs/*
+license/*
+license/admin_token.yml
 
 # Chef
 Berksfile.lock

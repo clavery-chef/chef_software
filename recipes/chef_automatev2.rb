@@ -22,6 +22,25 @@ chef_automatev2 'Create Automate server' do
   end
 end
 
+execute 'apply license' do
+  command 'chef-automate license apply /opt/support/license/automate2.txt'
+  only_if { ::File.exist?('/opt/support/license/automate2.txt') }
+  not_if { shell_out("chef-automate license status").stdout.include?('License ID:')}
+end
+
+execute 'IAM upgrade to v2' do
+  command 'chef-automate iam upgrade-to-v2'
+  only_if {node['chef_software']['automate_IAM_version'] == "v2" }
+  not_if {shell_out("chef-automate iam version").stdout.include?("V.20")}
+  end
+
+execute 'restore admin password after IAM upgrade' do
+  command "chef-automate iam admin-access restore #{node['chef_software']['adm_password']}"
+  only_if {node['chef_software']['automate_IAM_version'] == "v2" }
+  not_if {shell_out("chef-automate iam version").stdout.include?("V.20")}
+end
+
+
 if node['chef_software']['automate_admin_token']
   node['chef_software']['automatev2_local_users']&.each do |name, hash|
     execute "create local user #{name}" do

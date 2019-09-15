@@ -16,6 +16,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+ENV['CHEF_LICENSE'] = "accept-no-persist"
 chef_server 'chef-server' do
   node['chef_software']['chef_server']&.each do |key, value|
     send(key, value)

@@ -16,10 +16,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-default['chef_software']['chef_server_api_fqdn'] = 'chef-server.example.com'
-default['chef_software']['chef_automate_api_fqdn'] = 'chef-automate.example.com'
-default['chef_software']['chef_supermarket_api_fqdn'] = 'chef-supermarket.example.com'
+default['chef_software']['chef_server_api_fqdn'] = 'chef-server.test'
+default['chef_software']['chef_automate_api_fqdn'] = 'chef-automate.test'
+default['chef_software']['chef_supermarket_api_fqdn'] = 'chef-supermarket.test'
 default['chef_software']['automate_admin_token'] = nil
+default['chef_software']['automate_IAM_version'] = "v2"
+default['chef_software']['adm_password'] = "iamtheboss"
 
 default['chef_software']['chef_automatev2'] = {
   accept_license: true,
@@ -30,17 +32,17 @@ default['chef_software']['chef_automatev2'] = {
 }
 
 default['chef_software']['automatev2_local_users'] = {
-  test1: {
-    full_name: 'Test 1',
-    password: 'Test1234!',
+  admin: {
+    full_name: 'admin',
+    password: "#{node['chef_software']['adm_password']}",
     sensitive: true,
   },
 }
 
 default['chef_software']['automatev2_iam_policies'] = {
-  test1: {
+  admin: {
     policy_json: {
-      subjects: ['user:local:test1'],
+      subjects: ['user:local:admin'],
       action: '*',
       resource: '*',
     },
@@ -57,6 +59,7 @@ default['chef_software']['chef_server'] = {
   },
   config: <<~EOC
     api_fqdn "#{node['chef_software']['chef_server_api_fqdn']}"
+    chef_license 'accept'
     topology "standalone"
     #{"data_collector['root_url'] = 'https://#{node['chef_software']['chef_automate_api_fqdn']}/data-collector/v0/'
 data_collector['proxy'] = true
@@ -69,18 +72,18 @@ oc_id['applications']['supermarket'] = {
 }
 
 default['chef_software']['chef_user'] = {
-  test1: {
-    first_name: 'Test',
+  admin: {
+    first_name: 'Admin',
     last_name: '1',
-    email: 'test1@example.com',
-    password: 'Test1234!',
+    email: 'admin@example.com',
+    password: "#{node['chef_software']['adm_password']}",
   },
 }
 
 default['chef_software']['chef_org'] = {
   testing: {
     org_full_name: 'Testing Chef Server',
-    admins: %w(test1),
+    admins: %w(admin),
     users: %w(),
   },
 }
@@ -95,7 +98,7 @@ default['chef_software']['chef_supermarket'] = {
     fqdn: node['chef_software']['chef_supermarket_api_fqdn'],
     smtp_address: 'localhost',
     smtp_port: 25,
-    from_email: 'chef-supermarket@example.com',
+    from_email: 'chef-supermarket@test',
     features: 'tools,gravatar,github,announcement,fieri',
     fieri_key: 'randomstuff',
     fieri_supermarket_endpoint: node['chef_software']['chef_supermarket_api_fqdn'],

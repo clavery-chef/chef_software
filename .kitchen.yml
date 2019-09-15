@@ -1,7 +1,6 @@
 ---
 driver:
   name: vagrant
-  pre_create_command: vagrant box update --box $KITCHEN_PLATFORM_NAME
   customize:
     memory: 2048
     cpus: 2
@@ -17,38 +16,161 @@ provisioner:
     client_fork: false  # Forked instances don't return the real exit code
     environment: _default
   product_name: chef
-  product_version: 14
+  product_version: 15
+  chef_license: accept
 
 verifier:
   name: inspec
 
 platforms:
-  - name: bento/centos-7
+  - name: support
 
 suites:
-  - name: automatev2
+  - name: a2
     driver:
+      box: bento/centos-7
+      vm_hostname: chef-automate.test
+      synced_folders:
+      - [".", "/opt/support", create: true, owner: "root", group: "root"]
+      network:
+      - ["private_network", {ip: "192.168.33.199"}]
       customize:
-        memory: 2560
+        memory: 3072
     run_list:
       - recipe[chef_software::chef_automatev2]
     verifier:
       inspec_tests:
         - test/integration/default
+        - test/integration/automatev2
     attributes:
+    lifecycle:
+      post_converge:
+        - local: |
+            knife ssl fetch https://chef-automate.test
+            cp /Users/clavery/.chef/trusted_certs/chef-automate_test.crt ./certs
+        - remote: |
+            if [ ! -f /opt/support/files/admin_token.yml ]; then
+              TOK="$(sudo chef-automate iam token create support --admin)"
+              sudo echo "admin_token: ${TOK}" > /opt/support/files/admin_token.yml
+            fi
+      pre_destroy: 
+        - local: |
+            rm -f  files/admin_token.yml
+
 
   - name: server
+    driver:
+      box: bento/centos-7
+      vm_hostname: chef-server.test
+      synced_folders:
+      - [".", "/opt/support", create: true, owner: "root", group: "root"]
+      network:
+      - ["private_network", {ip: "192.168.33.200"}]
     run_list:
       - recipe[chef_software::chef_server]
     verifier:
       inspec_tests:
         - test/integration/default
     attributes:
+    lifecycle:
+      post_converge:
+        - local: |
+            knife ssl fetch https://chef-server.test
+            cp /Users/clavery/.chef/trusted_certs/chef-server_test.crt ./certs
 
-  - name: supermarket
+  - name: supmkt
+    driver:
+      box: bento/centos-7
+      vm_hostname: chef-supermarket.test
+      synced_folders:
+      - [".", "/opt/support", create: true, owner: "root", group: "root"]
+      network:
+      - ["private_network", {ip: "192.168.33.201"}]
     run_list:
       - recipe[chef_software::chef_supermarket]
     verifier:
       inspec_tests:
         - test/integration/default
     attributes:
+
+  - name: cl-1
+    driver:
+      box: bento/centos-7
+      vm_hostname: client-1.test
+      customize:
+        memory: 512
+      synced_folders:
+      - [".", "/opt/support", create: true, owner: "root", group: "root"]
+      network:
+      - ["private_network", {ip: "192.168.33.202"}]
+    provisioner:
+      name: chef_solo
+      always_update_cookbooks: true
+      retry_on_exit_code:
+      - 35 # 35 is the exit code signaling that the node is rebooting
+      max_retries: 1
+      install_strategy: once
+      solo_rb:
+        chef_server_url:  "https://chef-server.test:8989"
+        log_location:   STDOUT
+        node_name: "client-1.test"
+        trusted_certs_dir: "/opt/support/certs"
+        data_collector.server_url: "https://chef-automate.test/data-collector/v0"
+        data_collector.mode:       :both
+        data_collector.token:  <%= if File.exist?('files/admin_token.yml')
+                                '"' + YAML::load_file('files/admin_token.yml')['admin_token'] + '"'
+                                else 
+                                '""' 
+                                end %> 
+      product_name: chef
+      product_version: 15.2.20
+      chef_license: accept
+    lifecycle:
+      pre_converge:
+        - remote: |
+            HC=$(cat /etc/hosts | wc -l ) 
+            echo $HC
+            if [ "$HC" == "3" ]; then 
+              cat /opt/support/files/hosts.txt | sudo tee -a /etc/hosts
+            fi
+
+  - name: cl-2
+    driver:
+      box: bento/ubuntu-18.04
+      vm_hostname: client-2.test
+      customize:
+        memory: 512
+      synced_folders:
+      - [".", "/opt/support", create: true, owner: "root", group: "root"]
+      network:
+      - ["private_network", {ip: "192.168.33.203"}]
+    provisioner:
+      name: chef_solo
+      always_update_cookbooks: true
+      retry_on_exit_code:
+      - 35 # 35 is the exit code signaling that the node is rebooting
+      max_retries: 1
+      install_strategy: once
+      solo_rb:
+        chef_server_url:  "https://chef-server.test:8989"
+        log_location:   STDOUT
+        node_name: "client-2.test"
+        trusted_certs_dir: "/opt/support/certs"
+        data_collector.server_url: "https://chef-automate.test/data-collector/v0"
+        data_collector.mode:       :both
+        data_collector.token:  <%= if File.exist?('files/admin_token.yml')
+                                '"' + YAML::load_file('files/admin_token.yml')['admin_token'] + '"'
+                                else 
+                                '""' 
+                                end %> 
+      product_name: chef
+      product_version: 14.12.9
+      chef_license: accept
+    lifecycle:
+      pre_converge:
+        - remote: |
+            HC=$(cat /etc/hosts | wc -l ) 
+            echo $HC
+            if [ "$HC" -lt "8" ]; then 
+              cat /opt/support/files/hosts.txt | sudo tee -a /etc/hosts
+            fi
