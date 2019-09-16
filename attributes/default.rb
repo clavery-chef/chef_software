@@ -22,6 +22,8 @@ default['chef_software']['chef_supermarket_api_fqdn'] = 'chef-supermarket.test'
 default['chef_software']['automate_admin_token'] = nil
 default['chef_software']['automate_IAM_version'] = "v2"
 default['chef_software']['adm_password'] = "iamtheboss"
+default['chef_software']['a2_version'] = "latest"
+
 
 default['chef_software']['chef_automatev2'] = {
   accept_license: true,

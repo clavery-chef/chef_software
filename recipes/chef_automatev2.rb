@@ -19,7 +19,31 @@
 chef_automatev2 'Create Automate server' do
   node['chef_software']['chef_automatev2']&.each do |key, value|
     send(key, value)
+  only_if { node['chef_software']['a2_version'] == "latest" }
   end
+end
+
+execute 'get custom automate cli' do
+  command "curl https://packages.chef.io/files/current/automate/#{node['chef_software']['a2_version']}/chef-automate_linux_amd64.zip | gunzip - > chef-automate && chmod +x chef-automate"
+  not_if { node['chef_software']['a2_version'] == "latest"}
+  not_if { ::File.exist?('current.json')}
+end
+execute 'get manifest' do
+  command "curl \"https://packages.chef.io/manifests/automate/#{node['chef_software']['a2_version']}.json\" > current.json"
+  not_if { node['chef_software']['a2_version'] == "latest"}
+  not_if { ::File.exist?('current.json')}
+end
+
+execute 'Create Automate Server on custom version' do
+  command "./chef-automate deploy \
+    --fqdn #{node['chef_software']['chef_automate_api_fqdn']} \
+    --accept-terms-and-mlsa \
+    --skip-preflight \
+    --no-check-version  \
+    --upgrade-strategy=none \
+    --manifest-dir  ."
+  not_if { node['chef_software']['a2_version'] == "latest"}
+  not_if { ::File.exist?('current.json')}
 end
 
 execute 'apply license' do
@@ -32,14 +56,13 @@ execute 'IAM upgrade to v2' do
   command 'chef-automate iam upgrade-to-v2'
   only_if {node['chef_software']['automate_IAM_version'] == "v2" }
   not_if {shell_out("chef-automate iam version").stdout.include?("V.20")}
-  end
+end
 
 execute 'restore admin password after IAM upgrade' do
   command "chef-automate iam admin-access restore #{node['chef_software']['adm_password']}"
   only_if {node['chef_software']['automate_IAM_version'] == "v2" }
   not_if {shell_out("chef-automate iam version").stdout.include?("V.20")}
 end
-
 
 if node['chef_software']['automate_admin_token']
   node['chef_software']['automatev2_local_users']&.each do |name, hash|

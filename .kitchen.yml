@@ -23,7 +23,16 @@ verifier:
   name: inspec
 
 platforms:
-  - name: support
+  - name: harbour
+    attributes:
+      chef_software:
+        chef_server_api_fqdn: chef-server.test
+        chef_automate_api_fqdn: chef-automate.test
+        chef_supermarket_api_fqdn: chef-supermarket.test
+        automate_admin_token: nil
+        automate_IAM_version: v2
+        adm_password: iamtheboss
+        a2_version: latest # 20190513175357
 
 suites:
   - name: a2
@@ -45,18 +54,30 @@ suites:
     attributes:
     lifecycle:
       post_converge:
-        - local: |
-            knife ssl fetch https://chef-automate.test
-            cp /Users/clavery/.chef/trusted_certs/chef-automate_test.crt ./certs
-        - remote: |
-            if [ ! -f /opt/support/files/admin_token.yml ]; then
-              TOK="$(sudo chef-automate iam token create support --admin)"
-              sudo echo "admin_token: ${TOK}" > /opt/support/files/admin_token.yml
+      - local: |
+          knife ssl fetch https://chef-automate.test
+          cp /Users/clavery/.chef/trusted_certs/chef-automate_test.crt ./certs
+      - remote: |
+          if [ ! -f /opt/support/files/admin_token.yml ]; then
+            TOK="$(sudo chef-automate iam token create support --admin)"
+            sudo echo "admin_token: ${TOK}" > /opt/support/files/admin_token.yml
             fi
-      pre_destroy: 
-        - local: |
-            rm -f  files/admin_token.yml
+            sudo hab pkg install chef/gatherlogs_reporter -b --force
+      post_verify:
+      - remote: |
+          export HOST=$(uname -n)
+          sudo chef-automate gather-logs -o /opt/support/logs/newlogs/$HOST.tar.gz
+          gatherlog report automate2 -p /opt/support/logs/newlogs/$HOST.tar.gz
+          mv /opt/support/logs/newlogs/$HOST.tar.gz /opt/support/logs/oldlogs/$HOST-`date +%Y%m%d%H%M%S`.tar.gz
 
+      pre_destroy: 
+      - local: |
+          rm -f  files/admin_token.yml certs/chef-automate_test.crt
+
+      - remote: |
+          export HOST=$(uname -n)
+          rm -rf l/opt/support/ogs/{new,old}logs/$HOST* 
+        skippable: true
 
   - name: server
     driver:
@@ -74,13 +95,43 @@ suites:
     attributes:
     lifecycle:
       post_converge:
-        - local: |
-            knife ssl fetch https://chef-server.test
-            cp /Users/clavery/.chef/trusted_certs/chef-server_test.crt ./certs
+      - local: |
+          knife ssl fetch https://chef-server.test
+          cp /Users/clavery/.chef/trusted_certs/chef-server_test.crt ./certs
+      - remote: |
+          sudo chef-server-ctl set-secret data_collector token <%= if File.exist?('files/admin_token.yml')
+                                                                '"' + YAML::load_file('files/admin_token.yml')['admin_token'] + '"'
+                                                                else 
+                                                                '"INVALID"' 
+                                                                end %>
+          sudo chef-server-ctl restart nginx
+          sudo chef-server-ctl restart opscode-erchef
+          sudo mkdir -p /hab/accepted-licenses
+          sudo touch /hab/accepted-licenses/habitat
+          sudo curl https://raw.githubusercontent.com/habitat-sh/habitat/master/components/hab/install.sh | sudo bash
+          sudo hab pkg install chef/gatherlogs_reporter -b --force
+      post_verify:
+      - remote: |
+          export HOST=$(uname -n)
+          sudo chef-server-ctl gather-logs && mv $HOST* /opt/support/logs/newlogs/
+          gatherlog report chef-server -p /opt/support/logs/newlogs/$HOST* 
+          mv /opt/support/logs/newlogs/$HOST* /opt/support/logs/oldlogs/
 
-  - name: supmkt
+      pre_destroy: 
+      - local:
+          rm -f certs/chef-server_test.crt
+      - remote: |
+          export HOST=$(uname -n)
+          rm -rf /opt/support/logs/{new,old}logs/$HOST* 
+        skippable: true 
+
+  - name: sprmkt
+
     driver:
       box: bento/centos-7
+      customize:
+        memory: 1024
+        cpus: 1
       vm_hostname: chef-supermarket.test
       synced_folders:
       - [".", "/opt/support", create: true, owner: "root", group: "root"]
@@ -109,7 +160,7 @@ suites:
       retry_on_exit_code:
       - 35 # 35 is the exit code signaling that the node is rebooting
       max_retries: 1
-      install_strategy: once
+      install_strategy: always # in case a new a2 token is created we need to crossload into the node
       solo_rb:
         chef_server_url:  "https://chef-server.test:8989"
         log_location:   STDOUT
@@ -150,7 +201,7 @@ suites:
       retry_on_exit_code:
       - 35 # 35 is the exit code signaling that the node is rebooting
       max_retries: 1
-      install_strategy: once
+      install_strategy: always # in case a new a2 token is created we need to crossload into the node
       solo_rb:
         chef_server_url:  "https://chef-server.test:8989"
         log_location:   STDOUT
@@ -164,7 +215,7 @@ suites:
                                 '""' 
                                 end %> 
       product_name: chef
-      product_version: 14.12.9
+      product_version: 13.6
       chef_license: accept
     lifecycle:
       pre_converge:
